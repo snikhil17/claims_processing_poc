@@ -1,0 +1,24 @@
+{
+  "system": {
+    "offline_mode": true,
+    "data_dir": "data",
+    "models_dir": "models",
+    "chroma_db_path": "data/chroma_db"
+  },
+  "models": {
+    "text_model": "gemma3:4b",
+    "embedding_model": "nomic-embed-text",
+    "ollama_host": "http://127.0.0.1:11434"
+  },
+  "processing": {
+    "chunk_size": 300,
+    "chunk_overlap": 50,
+    "max_context_length": 2500,
+    "temperature": 0.1
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8002,
+    "reload": false
+  }
+}
