@@ -181,7 +181,7 @@ class ClaimsProcessingAI:
     
     def __init__(self):
         self.llm = ChatOllama(
-            model="gemma3:4b",
+            model="phi4-mini:3.8b",
             temperature=0.1,
             base_url="http://127.0.0.1:11434"
         )

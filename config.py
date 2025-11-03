@@ -28,7 +28,7 @@ class Config:
                     "chroma_db_path": "data/chroma_db"
                 },
                 "models": {
-                    "text_model": "gemma3:4b",
+                    "text_model": "phi4-mini:3.8b",
                     "embedding_model": "nomic-embed-text",
                     "ollama_host": "http://127.0.0.1:11434"
                 },

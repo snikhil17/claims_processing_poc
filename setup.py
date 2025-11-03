@@ -10,6 +10,7 @@ import sys
 import json
 import requests
 import time
+import os
 
 print("Claims Processing AI - One-time Setup")
 print("=" * 70)
@@ -20,14 +21,164 @@ print("=" * 70)
 # ================================
 # STEP 1: Install Python Dependencies
 # ================================
-print("\nInstalling Python dependencies...")
+print("\nPreparing virtual environment and installing Python dependencies...")
 
+# Ensure we create a .venv that uses Python 3.11.13 and install ALL dependencies into that venv only.
+TARGET_VERSION = "3.11.13"
+VENV_DIR = ".venv"
+
+def _get_version_of_exe(exe_cmd):
+    """Return version string like '3.11.13' for a python executable or None."""
+    try:
+        # exe_cmd can be a list (for 'py -3.11') or a string executable
+        if isinstance(exe_cmd, list):
+            proc = subprocess.run(exe_cmd + ["-c", "import sys;print(\".\".join(map(str,sys.version_info[:3])))"],
+                                  capture_output=True, text=True, timeout=10)
+        else:
+            proc = subprocess.run([exe_cmd, "-c", "import sys;print(\".\".join(map(str,sys.version_info[:3])))"],
+                                  capture_output=True, text=True, timeout=10)
+
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+    except Exception:
+        return None
+    return None
+
+def find_python_for_target(target_version: str):
+    """Try to locate a python executable whose version matches target_version.
+
+    Returns the absolute path / executable specifier to use, or None.
+    """
+    candidates = [sys.executable, ["py", "-3.11"], "python3.11", "python3", "python"]
+
+    for cand in candidates:
+        try:
+            ver = _get_version_of_exe(cand)
+            if ver:
+                print(f"Detected Python candidate {cand} -> version {ver}")
+                if ver == target_version:
+                    return cand
+        except Exception:
+            continue
+
+    return None
+
+def create_or_reuse_venv(python_exe, venv_dir: str):
+    """Create a venv using the specified python executable if it doesn't exist.
+
+    Returns path to the venv python executable to use for installs.
+    """
+    venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
+
+    # If venv exists, reuse it regardless of exact Python patch-level differences.
+    # Just warn if versions differ from the TARGET_VERSION instead of deleting the venv.
+    if os.path.exists(venv_dir):
+        if os.path.exists(venv_python):
+            ver = _get_version_of_exe(venv_python)
+            print(f"Using existing venv at {venv_dir} (Python {ver})")
+            if ver != TARGET_VERSION:
+                print(f"WARNING: existing venv python version {ver} does not match target {TARGET_VERSION}, but will continue.")
+            return venv_python
+
+    # Create the venv using the located python executable
+    try:
+        print(f"Creating virtual environment at {venv_dir} using {python_exe}...")
+        if isinstance(python_exe, list):
+            cmd = python_exe + ["-m", "venv", venv_dir]
+        else:
+            cmd = [python_exe, "-m", "venv", venv_dir]
+
+        subprocess.run(cmd, check=True)
+        if os.path.exists(venv_python):
+            ver = _get_version_of_exe(venv_python)
+            print(f"Created venv with Python {ver}")
+            if ver != TARGET_VERSION:
+                print(f"WARNING: venv python version {ver} does not match target {TARGET_VERSION}")
+            return venv_python
+        else:
+            print("✗ Failed to find python in the created venv")
+            return None
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Failed creating virtualenv: {e}")
+        return None
+
+
+# Locate a python executable that is exactly the target version
+python_candidate = find_python_for_target(TARGET_VERSION)
+if not python_candidate:
+    # Do not abort if the exact target version isn't found. Use whatever Python is available
+    # (e.g., the one running this script) and warn the user. This makes setup more flexible
+    # on systems with newer Python versions such as 3.12.x.
+    print(f"⚠ Python {TARGET_VERSION} was not found on PATH. Proceeding with available Python interpreter (this may still work).")
+    print("   On Windows you can install the exact version if you want, but it's optional.")
+    fallback = sys.executable
+    ver = _get_version_of_exe(fallback)
+    print(f"Detected fallback Python {fallback} -> version {ver}")
+    python_candidate = fallback
+
+# Create or reuse the .venv using the located python
+venv_python = create_or_reuse_venv(python_candidate, VENV_DIR)
+if not venv_python:
+    print("✗ Could not create or prepare the virtual environment")
+    sys.exit(1)
+
+# Install dependencies INTO the venv only
 try:
-    result = subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], 
-                          check=True, capture_output=True, text=True)
-    print("✓ All packages installed successfully from requirements.txt")
+    print("Installing dependencies into the virtual environment (.venv)...")
+    # Upgrade pip/setuptools/wheel first
+    subprocess.run([venv_python, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], check=True)
+
+    subprocess.run([venv_python, "-m", "pip", "install", "-r", "requirements.txt", "--no-cache-dir", "--force-reinstall"],
+                   check=True)
+
+    print("✓ All packages installed successfully into .venv")
+    # Create small helper activation scripts for common shells and print instructions.
+    try:
+        project_root = os.path.abspath(os.path.dirname(__file__))
+        # PowerShell activation helper (user should run this in their PowerShell session)
+        ps1_path = os.path.join(project_root, "activate_venv.ps1")
+        with open(ps1_path, "w", encoding="utf-8") as f:
+            f.write("# PowerShell helper to activate the .venv in this project\n")
+            f.write("# Run in PowerShell: .\\activate_venv.ps1\n")
+            f.write("$venv = Join-Path $PSScriptRoot '.venv\\Scripts\\Activate.ps1'\n")
+            f.write("if (Test-Path $venv) { . $venv } else { Write-Error 'No .venv found; run setup.py to create it.' }\n")
+
+        # CMD activation helper
+        bat_path = os.path.join(project_root, "activate_venv.bat")
+        with open(bat_path, "w", encoding="utf-8") as f:
+            f.write("@echo off\n")
+            f.write("if exist .venv\\Scripts\\activate.bat (call .venv\\Scripts\\activate.bat) else (echo No .venv found; run setup.py to create it.)\n")
+
+        # POSIX shell helper
+        sh_path = os.path.join(project_root, "activate_venv.sh")
+        with open(sh_path, "w", encoding="utf-8") as f:
+            f.write("#!/usr/bin/env bash\n")
+            f.write("# POSIX helper to activate the venv in a new shell: source ./activate_venv.sh\n")
+            f.write("if [ -f .venv/bin/activate ]; then\n")
+            f.write("  . .venv/bin/activate\n")
+            f.write("else\n")
+            f.write("  echo 'No .venv found; run setup.py to create it.'\n")
+            f.write("fi\n")
+
+        # Make shell script executable where possible
+        try:
+            os.chmod(sh_path, 0o755)
+        except Exception:
+            pass
+
+        print("\nTo activate the virtual environment for this project run one of the following in your shell:")
+        print("  PowerShell (recommended on Windows):")
+        print("    PowerShell: .\\activate_venv.ps1")
+        print("    If you get an execution policy error, run: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\activate_venv.ps1")
+        print("  cmd.exe:")
+        print("    .\\activate_venv.bat")
+        print("  bash / WSL / macOS:")
+        print("    source ./activate_venv.sh")
+
+    except Exception as e:
+        print(f"Failed to create activation helper scripts: {e}")
 except subprocess.CalledProcessError as e:
-    print(f"✗ Package installation failed: {e.stderr}")
+    print(f"✗ Package installation failed: {e}")
     sys.exit(1)
 
 # ================================
@@ -74,7 +225,9 @@ print("\nDownloading Ollama models...")
 
 # Models used in the application
 ollama_models = {
-    "gemma3:4b": "Text processing and extraction",
+    # "gemma3:4b": "Text processing and extraction",
+    "phi4-mini:3.8b": "Text processing and extraction",
+    # "llama3.2:3b": "Text processing and extraction",
     "nomic-embed-text": "Document embeddings"
 }
 
@@ -88,10 +241,10 @@ for model, description in ollama_models.items():
             print(f"✓ {model} downloaded successfully")
         else:
             print(f"✗ Error downloading {model}: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        print(f"Download timeout for {model}, but it may continue in background")
     except Exception as e:
-        print(f"✗ Error downloading {model}: {e}")
+        # Log but continue; downloads will happen on-demand later.
+        print(f"✗ Error during model download step: {e}")
+
 
 # ================================
 # STEP 4: Pre-download Docling Models (Simple Import)
@@ -128,6 +281,32 @@ def predownload_docling():
 
 predownload_docling()
 
+# # ================================
+# # STEP 4: Pre-download Dolphin OCR Model
+# # ================================
+# print("\nPre-downloading ByteDance Dolphin OCR models...")
+
+# def predownload_dolphin():
+#     """Simple import to trigger Dolphin model download"""
+#     try:
+#         print("Initializing Dolphin OCR (this will download models)...")
+#         from dolphinofficial.ocr import OCR
+        
+#         # This line initializes the OCR engine and triggers
+#         # the model download to the local cache.
+#         ocr_engine = OCR() 
+        
+#         print("✓ Dolphin OCR models downloaded and cached")
+#         del ocr_engine # Free up memory
+#         return True
+
+#     except Exception as e:
+#         print(f"✗ Dolphin OCR setup error: {e}")
+#         print("   Please ensure you have internet and `dolphinofficial` is installed.")
+#         return False
+
+# predownload_dolphin()
+
 # ================================
 # STEP 5: Create Configuration File
 # ================================
@@ -141,7 +320,7 @@ config_content = {
         "chroma_db_path": "data/chroma_db"
     },
     "models": {
-        "text_model": "gemma3:4b",
+        "text_model": "phi4-mini:3.8b",
         "embedding_model": "nomic-embed-text",
         "ollama_host": "http://127.0.0.1:11434"
     },

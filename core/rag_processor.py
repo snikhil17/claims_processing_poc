@@ -29,7 +29,7 @@ class ClaimsProcessingAI:
     Handles ingestion, retrieval, and task-based extraction
     """
     
-    def __init__(self, text_model: str = "gemma3:4b", 
+    def __init__(self, text_model: str = "phi4-mini:3.8b", 
                  embedding_model: str = "nomic-embed-text"):
         """Initialize the Claims Processing AI"""
         

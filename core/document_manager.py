@@ -34,7 +34,7 @@ class FilenameBasedDocumentManager:
         try:
             from langchain_ollama import ChatOllama
             self.context_llm = ChatOllama(
-                model="gemma3:4b",
+                model="phi4-mini:3.8b",
                 temperature=0.1,
                 base_url="http://127.0.0.1:11434"
             )

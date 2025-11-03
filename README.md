@@ -47,7 +47,7 @@ python setup.py
 
 This will:
 - Install all Python dependencies
-- Download Ollama models (gemma3:4b and nomic-embed-text)
+- Download Ollama models (phi4-mini:3.8b and nomic-embed-text)
 - Pre-download IBM Granite Docling models
 - Initialize ChromaDB
 - Create necessary directories
@@ -68,10 +68,10 @@ ollama --version
 
 # Verify Ollama models were downloaded during setup
 ollama list
-# Should show: gemma3:4b and nomic-embed-text
+# Should show: phi4-mini:3.8b and nomic-embed-text
 
 # If models are missing, pull them manually
-ollama pull gemma3:4b
+ollama pull phi4-mini:3.8b
 ollama pull nomic-embed-text
 
 # Start Ollama server in background
@@ -456,7 +456,7 @@ Edit `config.json` to customize:
 ```json
 {
   "models": {
-    "text_model": "gemma3:4b",
+    "text_model": "phi4-mini:3.8b",
     "embedding_model": "nomic-embed-text"
   },
   "processing": {
@@ -496,7 +496,7 @@ curl -X POST http://localhost:8000/clear-memory
 ```
 
 ### Issue: Slow processing
-- Ensure you're using the recommended models (gemma3:4b is optimized for speed)
+- Ensure you're using the recommended models (phi4-mini:3.8b is optimized for speed)
 - Check CPU/RAM usage
 - Consider processing documents in smaller batches
 
